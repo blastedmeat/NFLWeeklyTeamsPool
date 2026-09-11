@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Team Pool</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#14110D; --surface:#1E1913; --surface2:#282118; --line:#3A3124;
+  --chalk:#EDE6D6; --muted:#9A8F7C; --turf:#5FA882; --brass:#C9A227; --flag:#C4553C;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--ink); color:var(--chalk);
+  font-family:Inter,system-ui,-apple-system,sans-serif;
+  font-size:15px; line-height:1.5;
+  -webkit-text-size-adjust:100%;
+  padding-bottom:env(safe-area-inset-bottom);
+}
+h1,h2,h3{font-family:Bitter,Georgia,serif;font-weight:700;margin:0;letter-spacing:-.01em}
+h1{font-size:21px}
+h2{font-size:17px;margin-bottom:10px}
+h3{font-size:14px;font-weight:500;color:var(--muted);margin-bottom:6px}
+.num{font-variant-numeric:tabular-nums}
+button{font:inherit;cursor:pointer;border:none;border-radius:var(--r)}
+input,select{font:inherit;color:var(--chalk);background:var(--surface2);border:1px solid var(--line);
+  border-radius:var(--r);padding:10px;width:100%}
+select:disabled,input:disabled{opacity:.45}
+:focus-visible{outline:2px solid var(--turf);outline-offset:2px}
+.btn{background:var(--turf);color:#0B140F;font-weight:600;padding:11px 16px}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:transparent;color:var(--chalk);border:1px solid var(--line)}
+.btn.small{padding:7px 11px;font-size:13px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.wrap{max-width:620px;margin:0 auto;padding:0 14px 40px}
+header{border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5}
+.hbar{max-width:620px;margin:0 auto;padding:12px 14px;display:flex;align-items:center;gap:10px}
+.hbar .who{margin-left:auto;font-size:13px;color:var(--muted)}
+nav{display:flex;gap:4px;max-width:620px;margin:0 auto;padding:0 10px 8px;overflow-x:auto}
+nav button{background:transparent;color:var(--muted);padding:7px 12px;font-size:14px;white-space:nowrap}
+nav button[aria-current="true"]{background:var(--surface2);color:var(--chalk)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin:14px 0}
+.row{display:flex;align-items:center;gap:10px}
+.slot{display:grid;grid-template-columns:52px 1fr;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.slot:last-child{border-bottom:none}
+.slot .pos{font-family:Bitter,serif;font-weight:700;font-size:13px;color:var(--muted)}
+.locked .pos{color:var(--flag)}
+.hint{font-size:12.5px;color:var(--muted);margin-top:4px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{text-align:left;font-weight:500;font-size:12.5px;color:var(--muted);padding:6px 4px;border-bottom:1px solid var(--line)}
+td{padding:9px 4px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:none}
+.pos-num{text-align:right}
+.money{color:var(--brass)}
+.money.neg{color:var(--flag)}
+.pill{display:inline-block;font-size:11.5px;padding:2px 7px;border-radius:99px;background:var(--surface2);color:var(--muted)}
+.pill.live{background:#2A3D2F;color:var(--turf)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;background:var(--surface2);
+  border:1px solid var(--line);padding:11px 16px;border-radius:var(--r);z-index:50;max-width:90%}
+.teams{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:5px}
+.teams label{display:flex;align-items:center;justify-content:center;gap:4px;font-size:12.5px;
+  padding:7px 2px;background:var(--surface2);border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.teams input{width:auto;margin:0}
+.teams label.on{background:#2A3D2F;border-color:var(--turf)}
+.center{text-align:center}
+.stack>*+*{margin-top:10px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+  <div class="hbar">
+    <h1>Team Pool</h1>
+    <span class="who" id="who"></span>
+  </div>
+  <nav id="nav" hidden></nav>
+</header>
+<main class="wrap" id="main"></main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, onSnapshot }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyC-ovBB18nMXBqN90ePzELFPkPCJ1YyFPo",
+  authDomain: "nfl-teams---weekly-fantasy.firebaseapp.com",
+  projectId: "nfl-teams---weekly-fantasy",
+  storageBucket: "nfl-teams---weekly-fantasy.firebasestorage.app",
+  messagingSenderId: "330695621410",
+  appId: "1:330695621410:web:3ff4d323d2ee6f0f4c437b"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+
+/* ---------- constants ---------- */
+const OWNERS = ["Tim","John","Dave","Justin","Marciano","Jack","Steve"];
+const ADMIN  = "tim";
+const TEAMS = ["ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU","IND",
+  "JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS"];
+const SLOTS = [
+  {k:"QB",  label:"QB",  pos:["QB"]},
+  {k:"RB1", label:"RB",  pos:["RB"]},
+  {k:"RB2", label:"RB",  pos:["RB"]},
+  {k:"WR1", label:"WR",  pos:["WR"]},
+  {k:"WR2", label:"WR",  pos:["WR"]},
+  {k:"WR3", label:"WR",  pos:["WR"]},
+  {k:"TE",  label:"TE",  pos:["TE"]},
+  {k:"SF",  label:"SF",  pos:["QB","RB","WR","TE"]},
+  {k:"K",   label:"K",   pos:["K"]},
+  {k:"DEF", label:"DEF", pos:["DEF"]}
+];
+const DEFAULT_SCORING = {
+  passYdPer:25, passTd:4, passInt:-2, pass2pt:2,
+  rushYdPer:10, rushTd:6, rush2pt:2,
+  recPer:2, recYdPer:10, recTd:6, rec2pt:2,
+  fumLost:-2,
+  xp:1, fg0_39:3, fg40_49:4, fg50:5, fgMiss:0,
+  dSack:1, dInt:2, dFumRec:2, dTd:6, dSafety:2, dBlock:2,
+  paShutout:10, pa1_6:7, pa7_13:4, pa14_20:1, pa21_27:0, pa28_34:-1, pa35:-4
+};
+const slug = n => n.toLowerCase().replace(/[^a-z0-9]/g,"");
+
+/* ---------- state ---------- */
+let me=null, cfg=null, players=[], rosters={}, tab="lineup", lineup=null, viewWeek=1;
+const $ = h => { const d=document.createElement("div"); d.innerHTML=h.trim(); return d.firstElementChild; };
+const main = document.getElementById("main");
+const nav  = document.getElementById("nav");
+
+function toast(msg, ms=2600){
+  document.querySelectorAll(".toast").forEach(t=>t.remove());
+  const t=$(`<div class="toast">${msg}</div>`); document.body.append(t);
+  setTimeout(()=>t.remove(), ms);
+}
+const esc = s => String(s).replace(/[<>&"]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;",'"':"&quot;"}[c]));
+
+/* ---------- boot ---------- */
+async function boot(){
+  const cfgRef = doc(db,"pool","config");
+  let snap = await getDoc(cfgRef);
+  if(!snap.exists()){
+    await setDoc(cfgRef,{season:2026, week:1, kickoffs:{}, scoring:DEFAULT_SCORING});
+    snap = await getDoc(cfgRef);
+  }
+  cfg = snap.data();
+  if(!cfg.scoring){ cfg.scoring = DEFAULT_SCORING; await updateDoc(cfgRef,{scoring:DEFAULT_SCORING}); }
+  viewWeek = cfg.week || 1;
+
+  const ps = await getDocs(collection(db,"players"));
+  players = ps.docs.map(d=>({id:d.id,...d.data()}));
+  if(players.length === 0){
+    for(let i=0;i<OWNERS.length;i++){
+      const id = slug(OWNERS[i]);
+      await setDoc(doc(db,"players",id),
+        {name:OWNERS[i], order:i, teams:[], passcode:"", claimable:true, admin:id===ADMIN});
+    }
+    const again = await getDocs(collection(db,"players"));
+    players = again.docs.map(d=>({id:d.id,...d.data()}));
+  }
+  players.sort((a,b)=>(a.order??99)-(b.order??99));
+
+  onSnapshot(cfgRef, s => { if(s.exists()){ cfg = s.data(); } });
+
+  const saved = localStorage.getItem("tp_me");
+  if(saved && players.some(p=>p.id===saved)) { me = players.find(p=>p.id===saved); render(); }
+  else loginScreen();
+}
+
+/* ---------- login ---------- */
+function loginScreen(){
+  nav.hidden = true;
+  document.getElementById("who").textContent = "";
+  main.innerHTML = "";
+  const card = $(`<section class="card stack">
+    <h2>Who are you?</h2>
+    <select id="pick">${players.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join("")}</select>
+    <div id="pwarea"></div>
+  </section>`);
+  main.append(card);
+  const pick = card.querySelector("#pick");
+  const area = card.querySelector("#pwarea");
+
+  const draw = () => {
+    const p = players.find(x=>x.id===pick.value);
+    if(!p.passcode){
+      if(!p.claimable){
+        area.innerHTML = `<p class="hint">${esc(p.name)} isn't set up yet. Ask Tim to unlock it.</p>`;
+        return;
+      }
+      area.innerHTML = `<div class="stack">
+        <p class="hint">First time in. Pick a passcode you'll remember — it's only here to stop
+        someone opening the wrong lineup.</p>
+        <input id="pw" type="text" autocomplete="off" placeholder="Choose a passcode">
+        <button class="btn" id="go">Set passcode and sign in</button></div>`;
+      area.querySelector("#go").onclick = async () => {
+        const v = area.querySelector("#pw").value.trim();
+        if(!v) return toast("Type a passcode first.");
+        await updateDoc(doc(db,"players",p.id), {passcode:v, claimable:false});
+        p.passcode=v; p.claimable=false; signIn(p);
+      };
+    } else {
+      area.innerHTML = `<div class="stack">
+        <input id="pw" type="text" autocomplete="off" placeholder="Passcode">
+        <button class="btn" id="go">Sign in</button></div>`;
+      const go = async () => {
+        if(area.querySelector("#pw").value.trim() !== p.passcode) return toast("That passcode doesn't match.");
+        signIn(p);
+      };
+      area.querySelector("#go").onclick = go;
+      area.querySelector("#pw").onkeydown = e => { if(e.key==="Enter") go(); };
+    }
+  };
+  pick.onchange = draw; draw();
+}
+function signIn(p){ me=p; localStorage.setItem("tp_me",p.id); render(); }
+function signOut(){ me=null; localStorage.removeItem("tp_me"); loginScreen(); }
+
+/* ---------- shell ---------- */
+function render(){
+  document.getElementById("who").innerHTML =
+    `${esc(me.name)} · <a href="#" id="out" style="color:inherit">sign out</a>`;
+  document.getElementById("out").onclick = e => { e.preventDefault(); signOut(); };
+  const tabs = [["lineup","Lineup"],["standings","Standings"],["week","This week"]];
+  if(me.admin) tabs.push(["admin","Admin"]);
+  nav.hidden = false;
+  nav.innerHTML = tabs.map(([k,l]) =>
+    `<button data-t="${k}" aria-current="${tab===k}">${l}</button>`).join("");
+  nav.querySelectorAll("button").forEach(b => b.onclick = () => { tab=b.dataset.t; render(); });
+  ({lineup:viewLineup, standings:viewStandings, week:viewWeekTab, admin:viewAdmin}[tab] || viewLineup)();
+}
+
+function weekPicker(onChange){
+  const el = $(`<div class="row" style="margin-bottom:12px">
+    <button class="btn ghost small" id="prev">←</button>
+    <strong class="num">Week ${viewWeek}</strong>
+    <button class="btn ghost small" id="next">→</button>
+  </div>`);
+  el.querySelector("#prev").onclick = () => { if(viewWeek>1){viewWeek--; onChange();} };
+  el.querySelector("#next").onclick = () => { if(viewWeek<18){viewWeek++; onChange();} };
+  return el;
+}
+
+const kickoffOf = t => (cfg.kickoffs && cfg.kickoffs[String(viewWeek)] || {})[t] || null;
+const isLocked  = t => { const k = kickoffOf(t); return k ? Date.now() >= k : false; };
+
+/* ---------- lineup ---------- */
+async function loadRosters(teams){
+  for(const t of teams){
+    if(rosters[t]) continue;
+    const s = await getDoc(doc(db,"rosters",t));
+    rosters[t] = s.exists() ? (s.data().players||[]) : [];
+  }
+}
+async function viewLineup(){
+  main.innerHTML = "";
+  main.append(weekPicker(viewLineup));
+  const teams = me.teams || [];
+  if(teams.length === 0){
+    main.append($(`<section class="card"><h2>No teams yet</h2>
+      <p class="hint">Tim hasn't entered your four teams. Once he does they show up here.</p></section>`));
+    return;
+  }
+  await loadRosters(teams);
+  const pool = teams.flatMap(t => (rosters[t]||[]).map(p => ({...p, team:t})));
+  if(pool.length === 0){
+    main.append($(`<section class="card"><h2>Player list is empty</h2>
+      <p class="hint">Tim needs to run "Refresh player pool" in Admin.</p></section>`));
+    return;
+  }
+
+  const lref = doc(db,"lineups",`${viewWeek}_${me.id}`);
+  let s = await getDoc(lref);
+  if(!s.exists() && viewWeek>1){
+    const prev = await getDoc(doc(db,"lineups",`${viewWeek-1}_${me.id}`));
+    lineup = prev.exists() ? {...prev.data().slots} : {};
+  } else lineup = s.exists() ? {...s.data().slots} : {};
+
+  const card = $(`<section class="card"><h2>Your lineup</h2><div id="slots"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" id="save">Save lineup</button>
+      <span class="hint" id="status"></span></div></section>`);
+  const host = card.querySelector("#slots");
+
+  const redraw = () => {
+    host.innerHTML = "";
+    for(const sl of SLOTS){
+      const cur = lineup[sl.k] || "";
+      const curP = pool.find(p=>p.id===cur);
+      const lockedNow = curP ? isLocked(curP.team) : false;
+      const used = new Set(Object.entries(lineup).filter(([k])=>k!==sl.k).map(([,v])=>v));
+      const opts = pool
+        .filter(p => sl.pos.includes(p.pos))
+        .filter(p => p.id===cur || (!used.has(p.id) && !isLocked(p.team)))
+        .sort((a,b)=> a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
+      const row = $(`<div class="slot ${lockedNow?"locked":""}">
+        <span class="pos">${sl.label}${lockedNow?" 🔒":""}</span>
+        <select ${lockedNow?"disabled":""} data-k="${sl.k}">
+          <option value="">—</option>
+          ${opts.map(p=>`<option value="${p.id}" ${p.id===cur?"selected":""}>${esc(p.name)} · ${p.team}</option>`).join("")}
+        </select></div>`);
+      row.querySelector("select").onchange = e => { lineup[sl.k] = e.target.value; redraw(); };
+      host.append(row);
+    }
+  };
+  redraw();
+
+  card.querySelector("#save").onclick = async () => {
+    await setDoc(lref, {week:viewWeek, playerId:me.id, slots:lineup, updatedAt:Date.now()});
+    card.querySelector("#status").textContent = "Saved.";
+    setTimeout(()=>card.querySelector("#status").textContent="", 2500);
+  };
+  main.append(card);
+
+  const locks = teams.map(t => {
+    const k = kickoffOf(t);
+    return `<tr><td>${t}</td><td class="pos-num">${k
+      ? (Date.now()>=k ? '<span class="pill">locked</span>'
+         : new Date(k).toLocaleString([], {weekday:"short",hour:"numeric",minute:"2-digit"}))
+      : '<span class="pill">no kickoff yet</span>'}</td></tr>`;
+  }).join("");
+  main.append($(`<section class="card"><h2>Your teams this week</h2>
+    <table><tbody>${locks}</tbody></table>
+    <p class="hint">Each slot locks when that team kicks off. Everything else stays open.</p></section>`));
+}
+
+/* ---------- scores + money ---------- */
+function moneyForWeek(scores){
+  const ids = players.map(p=>p.id).filter(id => typeof scores[id] === "number");
+  const out = {}; ids.forEach(id => out[id]=0);
+  if(ids.length < 2) return out;
+  const top = Math.max(...ids.map(id=>scores[id]));
+  const winners = ids.filter(id=>scores[id]===top);
+  for(const id of ids){
+    if(winners.includes(id)) continue;
+    const owed = (top - scores[id]) * 0.5;
+    out[id] -= owed;
+    winners.forEach(w => out[w] += owed / winners.length);
+  }
+  return out;
+}
+const fmt = v => (v<0?"-":"") + "$" + Math.abs(v).toFixed(2);
+
+async function viewWeekTab(){
+  main.innerHTML = "";
+  main.append(weekPicker(viewWeekTab));
+  const s = await getDoc(doc(db,"scores",String(viewWeek)));
+  const scores = s.exists() ? (s.data().byPlayer||{}) : {};
+  const money = moneyForWeek(scores);
+  const rows = players
+    .map(p=>({p, pts:scores[p.id]}))
+    .sort((a,b)=>(b.pts??-1)-(a.pts??-1))
+    .map(({p,pts}) => `<tr><td>${esc(p.name)}</td>
+      <td class="pos-num num">${pts??"—"}</td>
+      <td class="pos-num num money ${money[p.id]<0?"neg":""}">${
+        typeof pts==="number" ? fmt(money[p.id]||0) : ""}</td></tr>`).join("");
+  main.append($(`<section class="card"><h2>Week ${viewWeek}</h2>
+    <table><thead><tr><th>Owner</th><th class="pos-num">Points</th><th class="pos-num">Week</th></tr></thead>
+    <tbody>${rows}</tbody></table>
+    ${Object.keys(scores).length ? "" : '<p class="hint">No scores in yet for this week.</p>'}
+    </section>`));
+}
+
+async function viewStandings(){
+  main.innerHTML = "";
+  const all = await getDocs(collection(db,"scores"));
+  const total = {}; const pts = {}; players.forEach(p=>{total[p.id]=0; pts[p.id]=0;});
+  all.docs.forEach(d => {
+    const byP = d.data().byPlayer||{};
+    const m = moneyForWeek(byP);
+    players.forEach(p => { total[p.id]+= (m[p.id]||0); pts[p.id]+= (byP[p.id]||0); });
+  });
+  const rows = players.slice().sort((a,b)=>total[b.id]-total[a.id]).map(p =>
+    `<tr><td>${esc(p.name)}</td>
+     <td class="pos-num num">${pts[p.id]}</td>
+     <td class="pos-num num money ${total[p.id]<0?"neg":""}">${fmt(total[p.id])}</td></tr>`).join("");
+  main.append($(`<section class="card"><h2>Season</h2>
+    <table><thead><tr><th>Owner</th><th class="pos-num">Points</th><th class="pos-num">Money</th></tr></thead>
+    <tbody>${rows}</tbody></table></section>`));
+}
+
+/* ---------- admin ---------- */
+async function viewAdmin(){
+  main.innerHTML = "";
+
+  // current week
+  const wk = $(`<section class="card"><h2>Current week</h2>
+    <div class="row"><input id="w" type="number" min="1" max="18" value="${cfg.week||1}" style="max-width:110px">
+    <button class="btn small" id="setw">Save</button></div></section>`);
+  wk.querySelector("#setw").onclick = async () => {
+    const v = Math.max(1, Math.min(18, +wk.querySelector("#w").value||1));
+    await updateDoc(doc(db,"pool","config"), {week:v});
+    cfg.week=v; viewWeek=v; toast("Week set to "+v);
+  };
+  main.append(wk);
+
+  // data pulls
+  const pulls = $(`<section class="card stack"><h2>Data</h2>
+    <button class="btn ghost" id="kick">Refresh kickoff times</button>
+    <button class="btn ghost" id="pool">Refresh player pool</button>
+    <button class="btn ghost" id="score">Pull stats and score week ${cfg.week}</button>
+    <p class="hint" id="dstat">Kickoffs decide the locks. Run it Wednesday and again Saturday
+    in case a game moves.</p></section>`);
+  const dstat = pulls.querySelector("#dstat");
+  pulls.querySelector("#kick").onclick  = () => pullKickoffs(dstat);
+  pulls.querySelector("#pool").onclick  = () => pullPlayers(dstat);
+  pulls.querySelector("#score").onclick = () => scoreWeek(cfg.week, dstat);
+  main.append(pulls);
+
+  // teams + passcodes
+  for(const p of players){
+    const card = $(`<section class="card"><h2>${esc(p.name)}</h2>
+      <h3>Four teams</h3><div class="teams" id="t${p.id}">
+      ${TEAMS.map(t=>`<label class="${(p.teams||[]).includes(t)?"on":""}">
+        <input type="checkbox" value="${t}" ${(p.teams||[]).includes(t)?"checked":""}>${t}</label>`).join("")}
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn small" id="sv">Save teams</button>
+        <button class="btn ghost small" id="rs">${p.passcode?"Reset passcode":"Unlock"}</button>
+        <span class="hint">${p.passcode?"passcode set":(p.claimable?"waiting to claim":"locked")}</span>
+      </div></section>`);
+    const box = card.querySelector("#t"+p.id);
+    box.querySelectorAll("input").forEach(i => i.onchange = () => {
+      i.closest("label").classList.toggle("on", i.checked);
+    });
+    card.querySelector("#sv").onclick = async () => {
+      const sel = [...box.querySelectorAll("input:checked")].map(i=>i.value);
+      if(sel.length !== 4) return toast("Pick exactly four teams.");
+      const taken = players.filter(o=>o.id!==p.id).flatMap(o=>o.teams||[]);
+      const clash = sel.filter(t=>taken.includes(t));
+      if(clash.length) return toast("Already drafted: "+clash.join(", "));
+      await updateDoc(doc(db,"players",p.id), {teams:sel});
+      p.teams = sel; rosters = {}; toast(p.name+"'s teams saved.");
+    };
+    card.querySelector("#rs").onclick = async () => {
+      await updateDoc(doc(db,"players",p.id), {passcode:"", claimable:true});
+      p.passcode=""; p.claimable=true; toast(p.name+" can set a new passcode.");
+      viewAdmin();
+    };
+    main.append(card);
+  }
+
+  // manual scores
+  const sdoc = await getDoc(doc(db,"scores",String(cfg.week)));
+  const cur = sdoc.exists() ? (sdoc.data().byPlayer||{}) : {};
+  const man = $(`<section class="card"><h2>Enter points by hand — week ${cfg.week}</h2>
+    ${players.map(p=>`<div class="slot"><span class="pos">${esc(p.name)}</span>
+      <input type="number" step="1" data-p="${p.id}" value="${cur[p.id]??""}"></div>`).join("")}
+    <button class="btn" id="sm" style="margin-top:12px">Save points</button>
+    <p class="hint">Use this for Week 1 and any time the stats pull looks wrong.</p></section>`);
+  man.querySelector("#sm").onclick = async () => {
+    const byPlayer = {};
+    man.querySelectorAll("input[data-p]").forEach(i => {
+      if(i.value!=="") byPlayer[i.dataset.p] = Math.round(+i.value);
+    });
+    await setDoc(doc(db,"scores",String(cfg.week)), {byPlayer, manual:true, updatedAt:Date.now()});
+    toast("Points saved.");
+  };
+  main.append(man);
+}
+
+/* ---------- pulls ---------- */
+async function pullKickoffs(status){
+  status.textContent = "Getting kickoff times…";
+  try{
+    const r = await fetch("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard");
+    const j = await r.json();
+    const week = String(j.week?.number ?? cfg.week);
+    const map = {};
+    for(const ev of (j.events||[])){
+      const t = new Date(ev.date).getTime();
+      for(const c of (ev.competitions?.[0]?.competitors||[])){
+        let ab = c.team?.abbreviation; if(!ab) continue;
+        if(ab==="WSH") ab="WAS";
+        map[ab] = t;
+      }
+    }
+    const kickoffs = {...(cfg.kickoffs||{})}; kickoffs[week] = map;
+    await updateDoc(doc(db,"pool","config"), {kickoffs});
+    cfg.kickoffs = kickoffs;
+    status.textContent = `Kickoffs stored for week ${week} — ${Object.keys(map).length} teams.`;
+  }catch(e){
+    status.textContent = "Couldn't reach ESPN. Slots stay unlocked until this works.";
+  }
+}
+
+async function pullPlayers(status){
+  const inUse = [...new Set(players.flatMap(p=>p.teams||[]))];
+  if(inUse.length === 0){ status.textContent = "Assign teams first."; return; }
+  status.textContent = "Downloading the player list (about 5 MB, give it a minute)…";
+  try{
+    const r = await fetch("https://api.sleeper.app/v1/players/nfl");
+    const all = await r.json();
+    const byTeam = {}; inUse.forEach(t => byTeam[t]=[]);
+    for(const id in all){
+      const p = all[id];
+      if(!p.team || !byTeam[p.team]) continue;
+      if(!["QB","RB","WR","TE","K"].includes(p.position)) continue;
+      if(p.status && /inactive|retired/i.test(p.status)) continue;
+      byTeam[p.team].push({id, name:p.full_name || `${p.first_name} ${p.last_name}`, pos:p.position});
+    }
+    for(const t of inUse){
+      byTeam[t].sort((a,b)=>a.name.localeCompare(b.name));
+      byTeam[t].push({id:t, name:t+" defense", pos:"DEF"});
+      await setDoc(doc(db,"rosters",t), {players:byTeam[t], updatedAt:Date.now()});
+    }
+    rosters = {};
+    status.textContent = `Player pool refreshed for ${inUse.length} teams.`;
+  }catch(e){
+    status.textContent = "Couldn't reach Sleeper. Try again in a minute.";
+  }
+}
+
+/* ---------- scoring ---------- */
+function scorePlayer(st, sc){
+  if(!st) return 0;
+  const n = k => +st[k] || 0;
+  let p = 0;
+  p += Math.floor(n("pass_yd")/sc.passYdPer) + n("pass_td")*sc.passTd
+     + n("pass_int")*sc.passInt + n("pass_2pt")*sc.pass2pt;
+  p += Math.floor(n("rush_yd")/sc.rushYdPer) + n("rush_td")*sc.rushTd + n("rush_2pt")*sc.rush2pt;
+  p += Math.floor(n("rec")/sc.recPer) + Math.floor(n("rec_yd")/sc.recYdPer)
+     + n("rec_td")*sc.recTd + n("rec_2pt")*sc.rec2pt;
+  p += n("fum_lost")*sc.fumLost;
+  // kicking — only the non-overlapping buckets; fgm_50p and fgm_60p are rollups
+  p += n("xpm")*sc.xp
+     + (n("fgm_0_19")+n("fgm_20_29")+n("fgm_30_39"))*sc.fg0_39
+     + n("fgm_40_49")*sc.fg40_49
+     + (n("fgm_50_59")+n("fgm_60p"))*sc.fg50;
+  return Math.round(p);
+}
+function scoreDefense(st, sc){
+  if(!st) return 0;
+  const n = k => +st[k] || 0;
+  let p = n("sack")*sc.dSack + n("int")*sc.dInt + n("fum_rec")*sc.dFumRec
+        + (n("def_td")+n("def_st_td")+n("st_td"))*sc.dTd
+        + n("safe")*sc.dSafety + n("blk_kick")*sc.dBlock;
+  const pa = n("pts_allow");
+  p += pa===0 ? sc.paShutout : pa<=6 ? sc.pa1_6 : pa<=13 ? sc.pa7_13 : pa<=20 ? sc.pa14_20
+     : pa<=27 ? sc.pa21_27 : pa<=34 ? sc.pa28_34 : sc.pa35;
+  return Math.round(p);
+}
+async function scoreWeek(week, status){
+  status.textContent = `Pulling week ${week} stats…`;
+  let stats;
+  try{
+    const r = await fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${cfg.season||2026}/${week}`);
+    stats = await r.json();
+  }catch(e){ status.textContent = "Couldn't reach Sleeper."; return; }
+  const sc = cfg.scoring || DEFAULT_SCORING;
+  const byPlayer = {};
+  for(const p of players){
+    const s = await getDoc(doc(db,"lineups",`${week}_${p.id}`));
+    if(!s.exists()) continue;
+    const slots = s.data().slots||{};
+    let total = 0;
+    for(const sl of SLOTS){
+      const id = slots[sl.k]; if(!id) continue;
+      total += sl.k==="DEF" ? scoreDefense(stats[id], sc) : scorePlayer(stats[id], sc);
+    }
+    byPlayer[p.id] = total;
+  }
+  await setDoc(doc(db,"scores",String(week)), {byPlayer, manual:false, updatedAt:Date.now()});
+  status.textContent = `Week ${week} scored for ${Object.keys(byPlayer).length} lineups.`;
+}
+
+boot().catch(e => {
+  main.innerHTML = `<section class="card"><h2>Can't reach the database</h2>
+    <p class="hint">${esc(e.message)}</p></section>`;
+});
+</script>
+</body>
+</html>
